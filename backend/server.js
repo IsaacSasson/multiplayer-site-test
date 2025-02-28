@@ -1,105 +1,196 @@
-// server.js
+import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { nanoid } from 'nanoid';
+import path from 'path';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
 
-const httpServer = createServer();
-const io = new Server(httpServer, {
+// Get current file directory (ES module equivalent of __dirname)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const server = createServer(app);
+const io = new Server(server, {
   cors: {
-    origin: "*", // In production, restrict this to your domain
-    methods: ["GET", "POST"]
+    origin: '*',
+    methods: ['GET', 'POST']
   }
 });
 
-// Store player data
+// Enable CORS
+app.use(cors());
+
+// Serve static files from the build directory
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Game state
 const players = {};
+const SPAWN_AREA = {
+  minX: 100,
+  maxX: 900,
+  minY: 100,
+  maxY: 500
+};
 
-// Available shapes for players
-const shapes = ['square', 'rectangle', 'triangle'];
+// Animal skins available in the game
+const AVAILABLE_SKINS = {
+  penguin: { name: 'Penguin', price: 0 },
+  polarBear: { name: 'Polar Bear', price: 10 },
+  seal: { name: 'Seal', price: 10 },
+  whale: { name: 'Whale', price: 10 },
+  dolphin: { name: 'Dolphin', price: 10 }
+};
 
+// Generate a random position within the spawn area
+function generateRandomPosition() {
+  return {
+    x: Math.floor(Math.random() * (SPAWN_AREA.maxX - SPAWN_AREA.minX) + SPAWN_AREA.minX),
+    y: Math.floor(Math.random() * (SPAWN_AREA.maxY - SPAWN_AREA.minY) + SPAWN_AREA.minY)
+  };
+}
+
+// Generate a unique username
+function generateUsername() {
+  return `Player-${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+// Socket.io connection handler
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log(`User connected: ${socket.id}`);
   
-  // Assign random shape to new player
-  const shape = shapes[Math.floor(Math.random() * shapes.length)];
+  // Generate a random position for the new player
+  const position = generateRandomPosition();
   
-  // Generate random position within reasonable bounds
-  const x = Math.floor(Math.random() * 800) + 50;
-  const y = Math.floor(Math.random() * 500) + 50;
-  
-  // Random color for the player
-  const color = `#${Math.floor(Math.random()*16777215).toString(16)}`;
-
-  // Create player data
+  // Create a new player object
   players[socket.id] = {
     id: socket.id,
-    x,
-    y,
-    shape,
-    color,
-    username: `Player-${nanoid(6)}`
+    username: generateUsername(),
+    x: position.x,
+    y: position.y,
+    direction: 'down',
+    skin: 'penguin', // Default skin
+    coins: 100, // Starting coins
+    ownedSkins: ['penguin'] // Default owned skins
   };
-
-  // Send the current state to new player
+  
+  // Send the current game state to the new player
   socket.emit('gameState', players);
   
-  // Notify others of new player
+  // Notify other players about the new player
   socket.broadcast.emit('playerJoined', players[socket.id]);
-
+  
   // Handle player movement
-  socket.on('playerMove', (position) => {
+  socket.on('playerMove', (data) => {
     if (players[socket.id]) {
-      players[socket.id].x = position.x;
-      players[socket.id].y = position.y;
+      players[socket.id].x = data.x;
+      players[socket.id].y = data.y;
+      players[socket.id].direction = data.direction || 'down';
       
-      // Broadcast player movement to all other players
+      // Broadcast the movement to all other players
       socket.broadcast.emit('playerMoved', {
         id: socket.id,
-        x: position.x,
-        y: position.y
+        x: data.x,
+        y: data.y,
+        direction: data.direction || 'down'
       });
     }
   });
-
+  
   // Handle chat messages
-  socket.on('chatMessage', (message) => {
+  socket.on('chatMessage', (text) => {
     if (players[socket.id]) {
-      io.emit('newMessage', {
-        id: socket.id,
+      const message = {
+        id: `msg-${Date.now()}-${socket.id}`,
         sender: players[socket.id].username,
-        text: message,
+        text: text,
         timestamp: new Date().toISOString()
-      });
+      };
+      
+      // Broadcast the message to all clients
+      io.emit('newMessage', message);
     }
   });
-
+  
   // Handle username changes
   socket.on('setUsername', (username) => {
     if (players[socket.id]) {
       const oldUsername = players[socket.id].username;
       players[socket.id].username = username;
       
+      // Broadcast the username change to all clients
       io.emit('usernameChanged', {
         id: socket.id,
-        oldUsername,
+        oldUsername: oldUsername,
         newUsername: username
       });
     }
   });
-
+  
+  // Handle skin purchases
+  socket.on('purchaseSkin', ({ skinName, price }) => {
+    if (players[socket.id] && AVAILABLE_SKINS[skinName]) {
+      const player = players[socket.id];
+      
+      // Check if already owned
+      if (player.ownedSkins.includes(skinName)) {
+        return; // Already owned
+      }
+      
+      // Check if enough coins
+      if (player.coins < price) {
+        return; // Not enough coins
+      }
+      
+      // Deduct coins and add skin
+      player.coins -= price;
+      player.ownedSkins.push(skinName);
+      
+      // Notify the player about the updated coins
+      socket.emit('coinsUpdated', {
+        coins: player.coins
+      });
+    }
+  });
+  
+  // Handle skin selection
+  socket.on('selectSkin', ({ skinName }) => {
+    if (players[socket.id] && AVAILABLE_SKINS[skinName]) {
+      const player = players[socket.id];
+      
+      // Check if skin is owned
+      if (!player.ownedSkins.includes(skinName)) {
+        return; // Not owned
+      }
+      
+      // Update skin
+      player.skin = skinName;
+      
+      // Broadcast the skin change to all clients
+      io.emit('skinChanged', {
+        id: socket.id,
+        skin: skinName,
+        username: player.username
+      });
+    }
+  });
+  
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    console.log(`User disconnected: ${socket.id}`);
     
-    // Notify other players of disconnection
-    io.emit('playerLeft', socket.id);
-    
-    // Remove from players list
-    delete players[socket.id];
+    // Remove the player from the game state
+    if (players[socket.id]) {
+      delete players[socket.id];
+      
+      // Notify other players about the disconnection
+      socket.broadcast.emit('playerLeft', socket.id);
+    }
   });
 });
 
+// Start the server
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
-  console.log(`WebSocket server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
