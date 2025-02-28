@@ -11,42 +11,48 @@ const useBackgroundImage = (imagePath) => {
   const [imageDetails, setImageDetails] = useState({
     loaded: false,
     image: null,
-    width: 2000, // Default dimensions
+    width: 2000,  // Default dimensions
     height: 2000
   });
 
   useEffect(() => {
+    // Use the background.png file as specifically requested
     const img = new Image();
     
     img.onload = () => {
       console.log(`Background image loaded: ${img.width}x${img.height}`);
       
+      // Use the actual dimensions of the background image
+      const mapWidth = img.width;
+      const mapHeight = img.height;
+      
       // Update local state
       setImageDetails({
         loaded: true,
         image: img,
-        width: img.width,
-        height: img.height
+        width: mapWidth,
+        height: mapHeight
       });
       
       // Update game context with map dimensions
-      updateMapDimensions(img.width, img.height);
+      updateMapDimensions(mapWidth, mapHeight);
     };
     
     img.onerror = (err) => {
       console.error('Failed to load background image:', err);
-      // Keep using default dimensions
+      // Fall back to default dimensions
+      updateMapDimensions(2000, 2000);
     };
     
-    // Start loading the image
-    img.src = imagePath;
+    // Start loading the background.png
+    img.src = '/assets/background.png';
     
     // Cleanup
     return () => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [imagePath, updateMapDimensions]);
+  }, [updateMapDimensions]);
 
   return imageDetails;
 };

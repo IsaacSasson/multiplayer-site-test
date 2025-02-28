@@ -79,10 +79,10 @@ function Player({ player, isCurrentPlayer }) {
       onMouseEnter={() => !isCurrentPlayer && setShowUsername(true)}
       onMouseLeave={() => !isCurrentPlayer && setShowUsername(false)}
     >
-      {/* Animal sprite with animated gradient background */}
-      <div className={`relative ${isCurrentPlayer ? 'scale-125' : 'scale-100'}`}>
+      {/* Animal sprite with animated gradient background - NO SCALE DIFFERENCE */}
+      <div className="relative">
         <div 
-          className="w-12 h-12 rounded-full"
+          className="w-16 h-16 rounded-full"
           style={{
             background: `linear-gradient(${hue}deg, var(--tw-gradient-stops))`,
             '--tw-gradient-from': gradientFrom,
@@ -97,9 +97,9 @@ function Player({ player, isCurrentPlayer }) {
           className="absolute inset-0 w-full h-full object-contain"
         />
         
-        {/* Highlight for current player */}
+        {/* Highlight for current player - thinner, non-scaling border */}
         {isCurrentPlayer && (
-          <div className={`absolute -inset-1 rounded-full border-2 ${highlightColor} animate-pulse opacity-70`} />
+          <div className={`absolute -inset-0.5 rounded-full border ${highlightColor} animate-pulse opacity-90`} />
         )}
       </div>
       

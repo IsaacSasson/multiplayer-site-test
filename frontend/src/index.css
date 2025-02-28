@@ -21,7 +21,8 @@
 }
 
 body {
-  @apply text-gray-800 bg-gray-100;
+  @apply text-gray-800 bg-gray-100 overflow-hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
 .theme-dark body {
@@ -31,6 +32,21 @@ body {
 /* Transition styles for smooth animations */
 .player-transition {
   transition: all 0.1s linear;
+}
+
+/* Make UI more readable with text shadows */
+.player-username {
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Fix z-index issues for UI elements */
+.ui-layer {
+  z-index: 50;
+}
+
+/* Improve minimap visibility */
+canvas.minimap {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Custom scrollbar for webkit browsers */

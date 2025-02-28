@@ -66,7 +66,7 @@ const Game = () => {
         
         if (player && Object.values(pressedKeys).some(pressed => pressed)) {
           // Calculate new position based on pressed keys
-          const speed = 5; // Movement speed in pixels
+          const speed = 10; // Increased movement speed for better gameplay
           let newX = player.x;
           let newY = player.y;
           
@@ -105,52 +105,70 @@ const Game = () => {
     };
   }, [player, pressedKeys, movePlayer, mapDimensions.width, mapDimensions.height]);
 
-  // Center the view on the player
-  const getBackgroundPosition = () => {
+  // Calculate transform to keep player centered
+  const calculateTransform = () => {
     if (!player) return { x: 0, y: 0 };
     
+    // Center the player in the viewport
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    // Calculate the offset needed to center the player
-    let offsetX = player.x - viewportWidth / 2;
-    let offsetY = player.y - viewportHeight / 2;
+    // Calculate the translation needed to center the player
+    const translateX = (viewportWidth / 2) - player.x;
+    const translateY = (viewportHeight / 2) - player.y;
     
-    // Constrain the offset so the background doesn't show empty space
-    const constrainedX = Math.max(0, Math.min(offsetX, mapDimensions.width - viewportWidth));
-    const constrainedY = Math.max(0, Math.min(offsetY, mapDimensions.height - viewportHeight));
-    
-    return { x: -constrainedX, y: -constrainedY };
+    return { x: translateX, y: translateY };
   };
 
-  const backgroundPosition = getBackgroundPosition();
+  const transform = calculateTransform();
 
   return (
     <div 
       ref={gameRef}
-      className="w-screen h-screen overflow-hidden relative"
+      className="w-screen h-screen overflow-hidden relative bg-midnight-950"
     >
-      {/* Background image - positioned to center on player */}
+      {/* The game world container - keeps player centered */}
       <div 
-        className="absolute top-0 left-0"
+        className="absolute inset-0"
         style={{
-          backgroundImage: 'url("/assets/background.png")',
-          backgroundPosition: `${backgroundPosition.x}px ${backgroundPosition.y}px`,
-          width: `${mapDimensions.width}px`,
-          height: `${mapDimensions.height}px`,
-          transition: 'background-position 0.1s linear'
+          width: mapDimensions.width,
+          height: mapDimensions.height,
+          transform: `translate(${transform.x}px, ${transform.y}px)`,
+          transition: 'transform 0.1s linear'
         }}
-      />
+      >
+        {/* Background - covers the entire map */}
+        <div
+          className="absolute top-0 left-0 w-full h-full"
+          style={{
+            backgroundImage: 'url("/assets/background.png")',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            width: '100%',
+            height: '100%'
+          }}
+        />
+        
+        {/* Player characters */}
+        {Object.values(players).map((playerData) => (
+          <Player 
+            key={playerData.id} 
+            player={playerData} 
+            isCurrentPlayer={player && playerData.id === player.id}
+          />
+        ))}
+      </div>
       
+      {/* UI Elements - fixed position */}
       {/* Connection status */}
       {!connected && (
-        <div className="absolute top-4 right-4 bg-burgundy-600 text-white px-3 py-1 rounded-md text-sm z-10">
+        <div className="absolute top-4 right-4 bg-burgundy-600 text-white px-3 py-1 rounded-md text-sm z-50">
           Disconnected
         </div>
       )}
       
       {/* Game info and Minimap */}
-      <div className="absolute top-4 left-4 z-10 flex flex-col space-y-2">
+      <div className="absolute top-4 left-4 z-50 flex flex-col space-y-2">
         <div className="bg-midnight-900 bg-opacity-70 text-white px-3 py-2 rounded-md text-sm">
           <p>Players online: {Object.keys(players).length}</p>
         </div>
@@ -161,11 +179,12 @@ const Game = () => {
           currentPlayerId={player?.id} 
           mapWidth={mapDimensions.width}
           mapHeight={mapDimensions.height}
+          backgroundSrc="/assets/background.png"
         />
       </div>
       
       {/* Coins and Shop Button */}
-      <div className="absolute top-4 right-4 flex items-center space-x-2 z-10">
+      <div className="absolute top-4 right-4 flex items-center space-x-2 z-50">
         <div className="bg-yellow-500 bg-opacity-80 text-midnight-900 px-3 py-1 rounded-md text-sm font-bold flex items-center">
           <svg className="w-5 h-5 mr-1 text-yellow-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -182,24 +201,12 @@ const Game = () => {
           Shop
         </button>
       </div>
-      
-      {/* Player characters */}
-      {Object.values(players).map((playerData) => (
-        <Player 
-          key={playerData.id} 
-          player={playerData} 
-          isCurrentPlayer={player && playerData.id === player.id}
-          style={{
-            transform: `translate(${backgroundPosition.x}px, ${backgroundPosition.y}px)`
-          }}
-        />
-      ))}
-      
+
       {/* Chat box */}
       <ChatBox />
       
       {/* Instructions */}
-      <div className="absolute bottom-4 right-4 bg-midnight-900 bg-opacity-70 text-white px-4 py-2 rounded-md text-sm">
+      <div className="absolute bottom-4 right-4 bg-midnight-900 bg-opacity-70 text-white px-4 py-2 rounded-md text-sm z-50">
         <p>Use arrow keys to move</p>
       </div>
       
