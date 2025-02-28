@@ -18,6 +18,12 @@ export const AVAILABLE_SKINS = {
   dolphin: { name: 'Dolphin', price: 10 }
 };
 
+// Available themes and their prices
+export const AVAILABLE_THEMES = {
+  default: { name: 'Burgundy Light', price: 0 },
+  dark: { name: 'Dark Burgundy', price: 10 }
+};
+
 export const GameProvider = ({ children }) => {
   // State for player, other players, and chat
   const [player, setPlayer] = useState(null);
@@ -25,11 +31,20 @@ export const GameProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [connected, setConnected] = useState(false);
   
-  // New state for coins and skins
+  // State for coins, skins, and themes
   const [playerCoins, setPlayerCoins] = useState(100); // Start with 100 coins
   const [playerSkins, setPlayerSkins] = useState({
     available: ['penguin'], // Start with just the default skin
-    selected: 'penguin'
+    selected: 'penguin',
+    availableThemes: ['default'], // Start with just the default theme
+    selectedTheme: 'default'
+  });
+  const [currentTheme, setCurrentTheme] = useState('default');
+  
+  // State for map dimensions
+  const [mapDimensions, setMapDimensions] = useState({
+    width: 2000,  // Default size, will be updated when the background image loads
+    height: 2000
   });
 
   useEffect(() => {
@@ -115,7 +130,7 @@ export const GameProvider = ({ children }) => {
           ...prev[data.id],
           x: data.x,
           y: data.y,
-          direction: data.direction // We'll add direction for animation
+          direction: data.direction
         }
       }));
     };
@@ -175,7 +190,7 @@ export const GameProvider = ({ children }) => {
       ]);
     };
 
-    // New handlers for skin system
+    // Skin change handler
     const onSkinChanged = (data) => {
       setPlayers((prev) => ({
         ...prev,
@@ -206,6 +221,29 @@ export const GameProvider = ({ children }) => {
         ]);
       }
     };
+    
+    // Theme change handler
+    const onThemeChanged = (data) => {
+      if (data.id === socket.id) {
+        setCurrentTheme(data.theme);
+        setPlayerSkins(prev => ({
+          ...prev,
+          selectedTheme: data.theme
+        }));
+      }
+    };
+    
+    // Map dimensions update handler
+    const onMapDimensionsUpdated = (dimensions) => {
+      setMapDimensions(dimensions);
+    };
+
+    // Coins update handler
+    const onCoinsUpdated = (data) => {
+      if (data.coins !== undefined) {
+        setPlayerCoins(data.coins);
+      }
+    };
 
     // Register socket event listeners
     socket.on('connect', onConnect);
@@ -217,6 +255,9 @@ export const GameProvider = ({ children }) => {
     socket.on('newMessage', onNewMessage);
     socket.on('usernameChanged', onUsernameChanged);
     socket.on('skinChanged', onSkinChanged);
+    socket.on('themeChanged', onThemeChanged);
+    socket.on('mapDimensionsUpdated', onMapDimensionsUpdated);
+    socket.on('coinsUpdated', onCoinsUpdated);
 
     // Cleanup on unmount
     return () => {
@@ -229,18 +270,33 @@ export const GameProvider = ({ children }) => {
       socket.off('newMessage', onNewMessage);
       socket.off('usernameChanged', onUsernameChanged);
       socket.off('skinChanged', onSkinChanged);
+      socket.off('themeChanged', onThemeChanged);
+      socket.off('mapDimensionsUpdated', onMapDimensionsUpdated);
+      socket.off('coinsUpdated', onCoinsUpdated);
     };
   }, []);
+
+  // Function to update map dimensions
+  const updateMapDimensions = (width, height) => {
+    setMapDimensions({ width, height });
+    
+    // Also, inform the server about the new map dimensions
+    socket.emit('updateMapDimensions', { width, height });
+  };
 
   // Function to move player
   const movePlayer = (x, y) => {
     if (player) {
+      // Ensure movement stays within map boundaries
+      const boundedX = Math.max(0, Math.min(x, mapDimensions.width));
+      const boundedY = Math.max(0, Math.min(y, mapDimensions.height));
+      
       // Calculate direction based on movement
       let direction = 'down'; // default
       
       if (player.x !== undefined && player.y !== undefined) {
-        const dx = x - player.x;
-        const dy = y - player.y;
+        const dx = boundedX - player.x;
+        const dy = boundedY - player.y;
         
         if (Math.abs(dx) > Math.abs(dy)) {
           // Horizontal movement is dominant
@@ -252,19 +308,19 @@ export const GameProvider = ({ children }) => {
       }
       
       // Update local state immediately
-      setPlayer((prev) => ({ ...prev, x, y, direction }));
+      setPlayer((prev) => ({ ...prev, x: boundedX, y: boundedY, direction }));
       setPlayers((prev) => ({
         ...prev,
         [socket.id]: {
           ...prev[socket.id],
-          x,
-          y,
+          x: boundedX,
+          y: boundedY,
           direction
         }
       }));
       
       // Send movement to server
-      socket.emit('playerMove', { x, y, direction });
+      socket.emit('playerMove', { x: boundedX, y: boundedY, direction });
     }
   };
 
@@ -348,6 +404,58 @@ export const GameProvider = ({ children }) => {
     return true;
   };
 
+  // Function to purchase theme
+  const purchaseTheme = (themeId) => {
+    if (!AVAILABLE_THEMES[themeId]) {
+      console.error(`Theme ${themeId} does not exist`);
+      return false;
+    }
+    
+    const price = AVAILABLE_THEMES[themeId].price;
+    
+    // Check if already owned
+    if (themeId === 'default' || playerSkins.availableThemes.includes(themeId)) {
+      return true; // Already owned
+    }
+    
+    // Check if enough coins
+    if (playerCoins < price) {
+      return false; // Not enough coins
+    }
+    
+    // Deduct coins and add theme to available
+    setPlayerCoins(prev => prev - price);
+    setPlayerSkins(prev => ({
+      ...prev,
+      availableThemes: [...prev.availableThemes, themeId]
+    }));
+    
+    // Emit to server
+    socket.emit('purchaseTheme', { themeId, price });
+    
+    return true;
+  };
+
+  // Function to select theme
+  const selectTheme = (themeId) => {
+    if (themeId !== 'default' && !playerSkins.availableThemes.includes(themeId)) {
+      console.error(`Theme ${themeId} not available for this player`);
+      return false;
+    }
+    
+    // Update local state
+    setCurrentTheme(themeId);
+    setPlayerSkins(prev => ({
+      ...prev,
+      selectedTheme: themeId
+    }));
+    
+    // Emit to server
+    socket.emit('selectTheme', { themeId });
+    
+    return true;
+  };
+
   // Context value
   const value = {
     player,
@@ -361,7 +469,13 @@ export const GameProvider = ({ children }) => {
     playerSkins,
     purchaseSkin,
     selectSkin,
-    availableSkins: AVAILABLE_SKINS
+    availableSkins: AVAILABLE_SKINS,
+    purchaseTheme,
+    selectTheme,
+    currentTheme,
+    availableThemes: AVAILABLE_THEMES,
+    mapDimensions,
+    updateMapDimensions
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

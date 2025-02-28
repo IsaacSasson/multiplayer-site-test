@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
+import { useGame } from '../contexts/GameContext';
 
 function Player({ player, isCurrentPlayer }) {
+  const { currentTheme } = useGame();
   const [showUsername, setShowUsername] = useState(false);
-  const [isMoving, setIsMoving] = useState(false);
   const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
+  const [hue, setHue] = useState(Math.floor(Math.random() * 360)); // Random starting hue
+
+  useEffect(() => {
+    // Animate the hue rotation for the background gradient
+    const interval = setInterval(() => {
+      setHue(prevHue => (prevHue + 1) % 360);
+    }, 100);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     // Always show username for a moment when player first appears
@@ -19,39 +30,46 @@ function Player({ player, isCurrentPlayer }) {
     }
   }, [player?.id, isCurrentPlayer]);
 
-  // Detect movement
+  // Update last position
   useEffect(() => {
-    if (player && (player.x !== lastPosition.x || player.y !== lastPosition.y)) {
-      setIsMoving(true);
+    if (player) {
       setLastPosition({ x: player.x, y: player.y });
-      
-      // Stop animation after a short delay when player stops moving
-      const timer = setTimeout(() => {
-        setIsMoving(false);
-      }, 300);
-      
-      return () => clearTimeout(timer);
     }
-  }, [player?.x, player?.y, lastPosition]);
+  }, [player?.x, player?.y]);
 
   // Debug - if no player, show empty div with error
   if (!player) {
     console.error('Player component rendered without player data');
-    return <div className="bg-red-500 p-2 text-white">Missing player data</div>;
+    return <div className="bg-burgundy-500 p-2 text-white">Missing player data</div>;
   }
 
-  // Get the correct sprite ID based on player skin and direction
-  const getSpriteId = () => {
-    const skin = player.skin || 'penguin';
-    const direction = player.direction || 'down';
-    return `${skin}-${direction}`;
+  // Get the correct SVG file based on player skin
+  const getSkinSrc = () => {
+    switch(player.skin) {
+      case 'polarBear':
+        return '/assets/polar-bear.svg';
+      case 'seal':
+        return '/assets/seal.svg';
+      case 'whale':
+        return '/assets/whale.svg';
+      case 'dolphin':
+        return '/assets/dolphin.svg';
+      case 'penguin':
+      default:
+        return '/assets/penguin.svg';
+    }
   };
+
+  // Theme-based styles
+  const isDarkTheme = currentTheme === 'dark';
+  const usernameCurrentPlayerBg = isDarkTheme ? 'bg-midnight-700 text-burgundy-400' : 'bg-burgundy-600 text-white';
+  const usernameOtherPlayerBg = isDarkTheme ? 'bg-midnight-800 text-gray-300' : 'bg-midnight-800 text-gray-200';
+  const highlightColor = isDarkTheme ? 'border-midnight-500' : 'border-burgundy-500';
+  const gradientFrom = isDarkTheme ? 'rgba(121, 26, 48, 0.3)' : 'rgba(202, 37, 69, 0.3)';
 
   return (
     <div 
-      className={`absolute transition-all duration-100 ease-out flex flex-col items-center ${
-        isMoving ? 'animate-bounce' : ''
-      }`}
+      className="absolute transition-all duration-100 ease-linear flex flex-col items-center player-transition"
       style={{ 
         left: `${player.x}px`, 
         top: `${player.y}px`,
@@ -61,18 +79,27 @@ function Player({ player, isCurrentPlayer }) {
       onMouseEnter={() => !isCurrentPlayer && setShowUsername(true)}
       onMouseLeave={() => !isCurrentPlayer && setShowUsername(false)}
     >
-      {/* Animal sprite */}
+      {/* Animal sprite with animated gradient background */}
       <div className={`relative ${isCurrentPlayer ? 'scale-125' : 'scale-100'}`}>
-        <svg 
-          viewBox="0 0 60 60" 
-          className={`w-12 h-12 ${isCurrentPlayer ? 'drop-shadow-lg' : ''}`}
-        >
-          <use href={`/assets/animal-sprites.svg#${getSpriteId()}`} />
-        </svg>
+        <div 
+          className="w-12 h-12 rounded-full"
+          style={{
+            background: `linear-gradient(${hue}deg, var(--tw-gradient-stops))`,
+            '--tw-gradient-from': gradientFrom,
+            '--tw-gradient-to': 'rgba(255, 255, 255, 0.5)',
+            '--tw-gradient-stops': 'var(--tw-gradient-from), var(--tw-gradient-to)'
+          }}
+        />
+        
+        <img 
+          src={getSkinSrc()} 
+          alt={player.skin}
+          className="absolute inset-0 w-full h-full object-contain"
+        />
         
         {/* Highlight for current player */}
         {isCurrentPlayer && (
-          <div className="absolute -inset-1 rounded-full border-2 border-blue-500 animate-pulse opacity-70" />
+          <div className={`absolute -inset-1 rounded-full border-2 ${highlightColor} animate-pulse opacity-70`} />
         )}
       </div>
       
@@ -81,8 +108,8 @@ function Player({ player, isCurrentPlayer }) {
         <div 
           className={`text-xs px-2 py-1 rounded-md whitespace-nowrap mt-1 ${
             isCurrentPlayer 
-              ? 'bg-blue-500 text-white font-medium' 
-              : 'bg-gray-800 text-gray-200 opacity-80'
+              ? usernameCurrentPlayerBg + ' font-medium' 
+              : usernameOtherPlayerBg + ' opacity-80'
           }`}
         >
           {player.username}

@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --color-primary: theme('colors.burgundy.600');
+  --color-primary-dark: theme('colors.burgundy.700');
+  --color-primary-light: theme('colors.burgundy.500');
+  --color-text: theme('colors.gray.800');
+  --color-bg: theme('colors.white');
+  --color-accent: theme('colors.burgundy.500');
+}
+
+.theme-dark {
+  --color-primary: theme('colors.midnight.800');
+  --color-primary-dark: theme('colors.midnight.900');
+  --color-primary-light: theme('colors.midnight.700');
+  --color-text: theme('colors.white');
+  --color-bg: theme('colors.midnight.950');
+  --color-accent: theme('colors.burgundy.500');
+}
+
+body {
+  @apply text-gray-800 bg-gray-100;
+}
+
+.theme-dark body {
+  @apply text-white bg-midnight-950;
+}
+
+/* Transition styles for smooth animations */
+.player-transition {
+  transition: all 0.1s linear;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-200;
+}
+
+.theme-dark ::-webkit-scrollbar-track {
+  @apply bg-midnight-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-burgundy-500 rounded-full;
+}
+
+.theme-dark ::-webkit-scrollbar-thumb {
+  @apply bg-burgundy-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-burgundy-600;
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-burgundy-600;
+}

@@ -24,13 +24,21 @@ app.use(cors());
 // Serve static files from the build directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
+// Add map dimensions to the server
+const MAP_DIMENSIONS = {
+  width: 2000,  // Default dimensions
+  height: 2000
+};
+
 // Game state
 const players = {};
+
+// Dynamic spawn area based on map dimensions
 const SPAWN_AREA = {
   minX: 100,
-  maxX: 900,
+  get maxX() { return MAP_DIMENSIONS.width - 100; },
   minY: 100,
-  maxY: 500
+  get maxY() { return MAP_DIMENSIONS.height - 100; }
 };
 
 // Animal skins available in the game
@@ -40,6 +48,12 @@ const AVAILABLE_SKINS = {
   seal: { name: 'Seal', price: 10 },
   whale: { name: 'Whale', price: 10 },
   dolphin: { name: 'Dolphin', price: 10 }
+};
+
+// Theme options available in the game
+const AVAILABLE_THEMES = {
+  default: { name: 'Burgundy Light', price: 0 },
+  dark: { name: 'Dark Burgundy', price: 10 }
 };
 
 // Generate a random position within the spawn area
@@ -71,7 +85,9 @@ io.on('connection', (socket) => {
     direction: 'down',
     skin: 'penguin', // Default skin
     coins: 100, // Starting coins
-    ownedSkins: ['penguin'] // Default owned skins
+    ownedSkins: ['penguin'], // Default owned skins
+    ownedThemes: ['default'], // Default owned themes
+    theme: 'default' // Default theme
   };
   
   // Send the current game state to the new player
@@ -80,18 +96,36 @@ io.on('connection', (socket) => {
   // Notify other players about the new player
   socket.broadcast.emit('playerJoined', players[socket.id]);
   
+  // Handle map dimension updates
+  socket.on('updateMapDimensions', (dimensions) => {
+    console.log('Received map dimensions:', dimensions);
+    
+    // Update the server's map dimensions
+    if (dimensions.width && dimensions.height) {
+      MAP_DIMENSIONS.width = dimensions.width;
+      MAP_DIMENSIONS.height = dimensions.height;
+      
+      // Optional: Broadcast the new dimensions to all clients
+      io.emit('mapDimensionsUpdated', MAP_DIMENSIONS);
+    }
+  });
+  
   // Handle player movement
   socket.on('playerMove', (data) => {
     if (players[socket.id]) {
-      players[socket.id].x = data.x;
-      players[socket.id].y = data.y;
+      // Ensure movement stays within map boundaries
+      const boundedX = Math.max(0, Math.min(data.x, MAP_DIMENSIONS.width));
+      const boundedY = Math.max(0, Math.min(data.y, MAP_DIMENSIONS.height));
+      
+      players[socket.id].x = boundedX;
+      players[socket.id].y = boundedY;
       players[socket.id].direction = data.direction || 'down';
       
       // Broadcast the movement to all other players
       socket.broadcast.emit('playerMoved', {
         id: socket.id,
-        x: data.x,
-        y: data.y,
+        x: boundedX,
+        y: boundedY,
         direction: data.direction || 'down'
       });
     }
@@ -171,6 +205,53 @@ io.on('connection', (socket) => {
         id: socket.id,
         skin: skinName,
         username: player.username
+      });
+    }
+  });
+  
+  // Handle theme purchases
+  socket.on('purchaseTheme', ({ themeId, price }) => {
+    if (players[socket.id] && AVAILABLE_THEMES[themeId]) {
+      const player = players[socket.id];
+      
+      // Check if already owned
+      if (player.ownedThemes.includes(themeId)) {
+        return; // Already owned
+      }
+      
+      // Check if enough coins
+      if (player.coins < price) {
+        return; // Not enough coins
+      }
+      
+      // Deduct coins and add theme
+      player.coins -= price;
+      player.ownedThemes.push(themeId);
+      
+      // Notify the player about the updated coins
+      socket.emit('coinsUpdated', {
+        coins: player.coins
+      });
+    }
+  });
+  
+  // Handle theme selection
+  socket.on('selectTheme', ({ themeId }) => {
+    if (players[socket.id] && AVAILABLE_THEMES[themeId]) {
+      const player = players[socket.id];
+      
+      // Check if theme is owned
+      if (!player.ownedThemes.includes(themeId)) {
+        return; // Not owned
+      }
+      
+      // Update theme
+      player.theme = themeId;
+      
+      // Notify only this player about the theme change (themes are client-side only)
+      socket.emit('themeChanged', {
+        id: socket.id,
+        theme: themeId
       });
     }
   });

@@ -3,117 +3,182 @@ import { useGame } from '../contexts/GameContext';
 import Player from './Player';
 import ChatBox from './ChatBox';
 import SkinShop from './SkinShop';
+import Minimap from './Minimap';
+import useBackgroundImage from '../hooks/useBackgroundImage';
 
 const Game = () => {
-  const { player, players, movePlayer, connected, playerCoins } = useGame();
+  const { player, players, movePlayer, connected, playerCoins, mapDimensions } = useGame();
   const [isShopOpen, setIsShopOpen] = useState(false);
   const gameRef = useRef(null);
   
-  // Handle keyboard movement
+  // Load background image and get dimensions
+  const background = useBackgroundImage('/assets/background.png');
+  
+  // Track pressed keys for smooth movement
+  const [pressedKeys, setPressedKeys] = useState({
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false
+  });
+  
+  // Store animation frame reference
+  const animationFrameRef = useRef(null);
+  const lastUpdateRef = useRef(0);
+  
+  // Handle key down/up events for smooth movement
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (!player) return;
-      
-      const speed = 10; // Movement speed in pixels
-      let newX = player.x;
-      let newY = player.y;
-      
-      // Arrow key movement
-      switch (e.key) {
-        case 'ArrowUp':
-          newY = Math.max(0, player.y - speed);
-          e.preventDefault();
-          break;
-        case 'ArrowDown':
-          newY = Math.min(window.innerHeight - 50, player.y + speed);
-          e.preventDefault();
-          break;
-        case 'ArrowLeft':
-          newX = Math.max(0, player.x - speed);
-          e.preventDefault();
-          break;
-        case 'ArrowRight':
-          newX = Math.min(window.innerWidth - 50, player.x + speed);
-          e.preventDefault();
-          break;
-        default:
-          return; // Don't update for other keys
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        setPressedKeys(prev => {
+          // Only update if the key wasn't already pressed
+          if (!prev[e.key]) {
+            return { ...prev, [e.key]: true };
+          }
+          return prev;
+        });
+        e.preventDefault();
       }
-      
-      if (newX !== player.x || newY !== player.y) {
-        movePlayer(newX, newY);
+    };
+    
+    const handleKeyUp = (e) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        setPressedKeys(prev => ({ ...prev, [e.key]: false }));
+        e.preventDefault();
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [player, movePlayer]);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
   
-  // Handle responsive movement calculation
+  // Start animation loop
   useEffect(() => {
-    const updateBounds = () => {
-      // If player is outside bounds after resize, move them within bounds
-      if (player) {
-        let needsUpdate = false;
-        let newX = player.x;
-        let newY = player.y;
+    const updatePlayerPosition = (timestamp) => {
+      // Throttle updates to 60fps (approx 16ms per frame)
+      if (timestamp - lastUpdateRef.current >= 16) {
+        lastUpdateRef.current = timestamp;
         
-        if (player.x > window.innerWidth - 50) {
-          newX = window.innerWidth - 50;
-          needsUpdate = true;
-        }
-        
-        if (player.y > window.innerHeight - 50) {
-          newY = window.innerHeight - 50;
-          needsUpdate = true;
-        }
-        
-        if (needsUpdate) {
-          movePlayer(newX, newY);
+        if (player && Object.values(pressedKeys).some(pressed => pressed)) {
+          // Calculate new position based on pressed keys
+          const speed = 5; // Movement speed in pixels
+          let newX = player.x;
+          let newY = player.y;
+          
+          if (pressedKeys.ArrowUp) {
+            newY = Math.max(0, player.y - speed);
+          }
+          if (pressedKeys.ArrowDown) {
+            newY = Math.min(mapDimensions.height, player.y + speed);
+          }
+          if (pressedKeys.ArrowLeft) {
+            newX = Math.max(0, player.x - speed);
+          }
+          if (pressedKeys.ArrowRight) {
+            newX = Math.min(mapDimensions.width, player.x + speed);
+          }
+          
+          // Only update if position changed
+          if (newX !== player.x || newY !== player.y) {
+            movePlayer(newX, newY);
+          }
         }
       }
+      
+      // Continue animation loop
+      animationFrameRef.current = requestAnimationFrame(updatePlayerPosition);
     };
     
-    window.addEventListener('resize', updateBounds);
-    return () => window.removeEventListener('resize', updateBounds);
-  }, [player, movePlayer]);
+    // Start animation loop
+    animationFrameRef.current = requestAnimationFrame(updatePlayerPosition);
+    
+    // Clean up animation frame on component unmount
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [player, pressedKeys, movePlayer, mapDimensions.width, mapDimensions.height]);
+
+  // Center the view on the player
+  const getBackgroundPosition = () => {
+    if (!player) return { x: 0, y: 0 };
+    
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Calculate the offset needed to center the player
+    let offsetX = player.x - viewportWidth / 2;
+    let offsetY = player.y - viewportHeight / 2;
+    
+    // Constrain the offset so the background doesn't show empty space
+    const constrainedX = Math.max(0, Math.min(offsetX, mapDimensions.width - viewportWidth));
+    const constrainedY = Math.max(0, Math.min(offsetY, mapDimensions.height - viewportHeight));
+    
+    return { x: -constrainedX, y: -constrainedY };
+  };
+
+  const backgroundPosition = getBackgroundPosition();
 
   return (
     <div 
       ref={gameRef}
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        backgroundImage: 'url("/assets/snowy-landscape.svg")',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center'
-      }}
     >
+      {/* Background image - positioned to center on player */}
+      <div 
+        className="absolute top-0 left-0"
+        style={{
+          backgroundImage: 'url("/assets/background.png")',
+          backgroundPosition: `${backgroundPosition.x}px ${backgroundPosition.y}px`,
+          width: `${mapDimensions.width}px`,
+          height: `${mapDimensions.height}px`,
+          transition: 'background-position 0.1s linear'
+        }}
+      />
+      
       {/* Connection status */}
       {!connected && (
-        <div className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-md text-sm z-10">
+        <div className="absolute top-4 right-4 bg-burgundy-600 text-white px-3 py-1 rounded-md text-sm z-10">
           Disconnected
         </div>
       )}
       
-      {/* Game info */}
-      <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-3 py-2 rounded-md text-sm">
-        <p>Players online: {Object.keys(players).length}</p>
+      {/* Game info and Minimap */}
+      <div className="absolute top-4 left-4 z-10 flex flex-col space-y-2">
+        <div className="bg-midnight-900 bg-opacity-70 text-white px-3 py-2 rounded-md text-sm">
+          <p>Players online: {Object.keys(players).length}</p>
+        </div>
+        
+        {/* Minimap */}
+        <Minimap 
+          players={players} 
+          currentPlayerId={player?.id} 
+          mapWidth={mapDimensions.width}
+          mapHeight={mapDimensions.height}
+        />
       </div>
       
       {/* Coins and Shop Button */}
       <div className="absolute top-4 right-4 flex items-center space-x-2 z-10">
-        <div className="bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-bold flex items-center">
-          <svg viewBox="0 0 24 24" className="w-5 h-5 mr-1">
-            <circle cx="12" cy="12" r="10" fill="#FFD700"/>
-            <circle cx="12" cy="12" r="8" fill="#FFC700"/>
-            <text x="12" y="16" textAnchor="middle" fill="#885800" fontSize="10" fontWeight="bold">$</text>
+        <div className="bg-yellow-500 bg-opacity-80 text-midnight-900 px-3 py-1 rounded-md text-sm font-bold flex items-center">
+          <svg className="w-5 h-5 mr-1 text-yellow-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           {playerCoins} Coins
         </div>
         <button 
-          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-md text-sm"
+          className="bg-burgundy-600 hover:bg-burgundy-700 text-white px-3 py-1 rounded-md text-sm shadow-md transition flex items-center"
           onClick={() => setIsShopOpen(true)}
         >
+          <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
           Shop
         </button>
       </div>
@@ -124,6 +189,9 @@ const Game = () => {
           key={playerData.id} 
           player={playerData} 
           isCurrentPlayer={player && playerData.id === player.id}
+          style={{
+            transform: `translate(${backgroundPosition.x}px, ${backgroundPosition.y}px)`
+          }}
         />
       ))}
       
@@ -131,7 +199,7 @@ const Game = () => {
       <ChatBox />
       
       {/* Instructions */}
-      <div className="absolute bottom-4 right-4 bg-black bg-opacity-70 text-white px-4 py-2 rounded-md text-sm">
+      <div className="absolute bottom-4 right-4 bg-midnight-900 bg-opacity-70 text-white px-4 py-2 rounded-md text-sm">
         <p>Use arrow keys to move</p>
       </div>
       
