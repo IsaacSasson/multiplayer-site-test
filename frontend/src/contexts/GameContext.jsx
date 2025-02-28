@@ -301,7 +301,7 @@ export const GameProvider = ({ children }) => {
         if (Math.abs(dx) > Math.abs(dy)) {
           // Horizontal movement is dominant
           direction = dx > 0 ? 'right' : 'left';
-        } else {
+        } else if (Math.abs(dy) > 0) {
           // Vertical movement is dominant
           direction = dy > 0 ? 'down' : 'up';
         }

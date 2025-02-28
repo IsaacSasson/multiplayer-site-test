@@ -43,6 +43,13 @@ function Player({ player, isCurrentPlayer }) {
     return <div className="bg-burgundy-500 p-2 text-white">Missing player data</div>;
   }
 
+  // Protect against invalid player coordinates
+  if (player.x === undefined || player.y === undefined || 
+      isNaN(player.x) || isNaN(player.y)) {
+    console.warn('Player has invalid coordinates:', player);
+    return null;
+  }
+
   // Get the correct SVG file based on player skin
   const getSkinSrc = () => {
     switch(player.skin) {
@@ -79,7 +86,7 @@ function Player({ player, isCurrentPlayer }) {
       onMouseEnter={() => !isCurrentPlayer && setShowUsername(true)}
       onMouseLeave={() => !isCurrentPlayer && setShowUsername(false)}
     >
-      {/* Animal sprite with animated gradient background - NO SCALE DIFFERENCE */}
+      {/* Animal sprite with animated gradient background */}
       <div className="relative">
         <div 
           className="w-16 h-16 rounded-full"
@@ -97,9 +104,9 @@ function Player({ player, isCurrentPlayer }) {
           className="absolute inset-0 w-full h-full object-contain"
         />
         
-        {/* Highlight for current player - thinner, non-scaling border */}
+        {/* Highlight for current player */}
         {isCurrentPlayer && (
-          <div className={`absolute -inset-0.5 rounded-full border ${highlightColor} animate-pulse opacity-90`} />
+          <div className={`absolute -inset-1 rounded-full border-2 ${highlightColor} animate-pulse opacity-90`} />
         )}
       </div>
       

@@ -16,15 +16,22 @@ const useBackgroundImage = (imagePath) => {
   });
 
   useEffect(() => {
-    // Use the background.png file as specifically requested
+    if (!imagePath) {
+      console.warn('No image path provided to useBackgroundImage');
+      return;
+    }
+    
+    // Create new image element
     const img = new Image();
     
+    // Setup load handler
     img.onload = () => {
-      console.log(`Background image loaded: ${img.width}x${img.height}`);
+      console.log(`Background image loaded successfully: ${img.width}x${img.height}`);
       
       // Use the actual dimensions of the background image
-      const mapWidth = img.width;
-      const mapHeight = img.height;
+      // If image dimensions are too small, use minimum dimensions
+      const mapWidth = Math.max(img.width, 2000);
+      const mapHeight = Math.max(img.height, 2000);
       
       // Update local state
       setImageDetails({
@@ -38,21 +45,31 @@ const useBackgroundImage = (imagePath) => {
       updateMapDimensions(mapWidth, mapHeight);
     };
     
+    // Setup error handler
     img.onerror = (err) => {
       console.error('Failed to load background image:', err);
+      console.error('Image path was:', imagePath);
+      
       // Fall back to default dimensions
+      setImageDetails(prev => ({
+        ...prev,
+        loaded: false
+      }));
+      
+      // Still update map dimensions with default values
       updateMapDimensions(2000, 2000);
     };
     
-    // Start loading the background.png
-    img.src = '/assets/background.png';
+    // Start loading the image
+    console.log('Loading background image from:', imagePath);
+    img.src = imagePath;
     
     // Cleanup
     return () => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [updateMapDimensions]);
+  }, [imagePath, updateMapDimensions]);
 
   return imageDetails;
 };
